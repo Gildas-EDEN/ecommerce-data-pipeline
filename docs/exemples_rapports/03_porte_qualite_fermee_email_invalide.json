@@ -1,0 +1,214 @@
+{
+  "overall_status": "FAIL",
+  "generated_at": "2026-10-06T15:30:19",
+  "tables": {
+    "customers": {
+      "table_name": "customers",
+      "total_records": 1,
+      "invalid_records": 1,
+      "invalid_ratio": 1.0,
+      "max_invalid_ratio": 0.0,
+      "validation_timestamp": "2026-10-06T15:30:19",
+      "checks": {
+        "schema": {
+          "status": "PASS",
+          "details": {
+            "missing_columns": [],
+            "unknown_columns": []
+          }
+        },
+        "row_count": {
+          "status": "PASS",
+          "details": "1 ligne(s)"
+        },
+        "required_not_null": {
+          "status": "PASS",
+          "failed_rows": 0,
+          "details": {}
+        },
+        "optional_nulls": {
+          "status": "PASS",
+          "details": {}
+        },
+        "data_types": {
+          "status": "PASS",
+          "details": []
+        },
+        "unique_customer_id": {
+          "status": "PASS",
+          "failed_rows": 0,
+          "details": "0 ligne(s) en doublon sur ['customer_id']"
+        },
+        "email_format_email": {
+          "status": "FAIL",
+          "failed_rows": 1,
+          "details": "1 e-mail(s) invalide(s)",
+          "sample": [
+            {
+              "row_number": 0,
+              "customer_id": 1004
+            }
+          ]
+        },
+        "allowed_values_status": {
+          "status": "PASS",
+          "failed_rows": 0,
+          "details": "0 valeur(s) hors de ['active', 'inactive']"
+        }
+      },
+      "overall_status": "FAIL",
+      "decision": "stop"
+    },
+    "orders": {
+      "table_name": "orders",
+      "total_records": 4,
+      "invalid_records": 0,
+      "invalid_ratio": 0.0,
+      "max_invalid_ratio": 0.0,
+      "validation_timestamp": "2026-10-06T15:30:19",
+      "checks": {
+        "schema": {
+          "status": "PASS",
+          "details": {
+            "missing_columns": [],
+            "unknown_columns": []
+          }
+        },
+        "row_count": {
+          "status": "PASS",
+          "details": "4 ligne(s)"
+        },
+        "required_not_null": {
+          "status": "PASS",
+          "failed_rows": 0,
+          "details": {}
+        },
+        "optional_nulls": {
+          "status": "PASS",
+          "details": {}
+        },
+        "data_types": {
+          "status": "PASS",
+          "details": []
+        },
+        "unique_order_id": {
+          "status": "PASS",
+          "failed_rows": 0,
+          "details": "0 ligne(s) en doublon sur ['order_id']"
+        },
+        "non_negative_total_amount": {
+          "status": "PASS",
+          "failed_rows": 0,
+          "details": "0 valeur(s) hors bornes"
+        },
+        "order_total_consistency": {
+          "status": "PASS",
+          "details": {
+            "orders_without_items": 0,
+            "orders_with_total_mismatch": 0,
+            "tolerance": 0.01
+          }
+        }
+      },
+      "overall_status": "PASS",
+      "decision": "continue"
+    },
+    "order_items": {
+      "table_name": "order_items",
+      "total_records": 5,
+      "invalid_records": 0,
+      "invalid_ratio": 0.0,
+      "max_invalid_ratio": 0.0,
+      "validation_timestamp": "2026-10-06T15:30:19",
+      "checks": {
+        "schema": {
+          "status": "PASS",
+          "details": {
+            "missing_columns": [],
+            "unknown_columns": []
+          }
+        },
+        "row_count": {
+          "status": "PASS",
+          "details": "5 ligne(s)"
+        },
+        "required_not_null": {
+          "status": "PASS",
+          "failed_rows": 0,
+          "details": {}
+        },
+        "optional_nulls": {
+          "status": "PASS",
+          "details": {}
+        },
+        "data_types": {
+          "status": "PASS",
+          "details": []
+        },
+        "unique_order_id_line_number": {
+          "status": "PASS",
+          "failed_rows": 0,
+          "details": "0 ligne(s) en doublon sur ['order_id', 'line_number']"
+        },
+        "positive_quantity": {
+          "status": "PASS",
+          "failed_rows": 0,
+          "details": "0 valeur(s) hors bornes"
+        },
+        "non_negative_unit_price": {
+          "status": "PASS",
+          "failed_rows": 0,
+          "details": "0 valeur(s) hors bornes"
+        }
+      },
+      "overall_status": "PASS",
+      "decision": "continue"
+    },
+    "products": {
+      "table_name": "products",
+      "total_records": 0,
+      "invalid_records": 0,
+      "invalid_ratio": 0.0,
+      "max_invalid_ratio": 0.0,
+      "validation_timestamp": "2026-10-06T15:30:19",
+      "checks": {
+        "schema": {
+          "status": "PASS",
+          "details": {
+            "missing_columns": [],
+            "unknown_columns": []
+          }
+        },
+        "row_count": {
+          "status": "WARN",
+          "details": "0 ligne(s)"
+        },
+        "required_not_null": {
+          "status": "PASS",
+          "failed_rows": 0,
+          "details": {}
+        },
+        "optional_nulls": {
+          "status": "PASS",
+          "details": {}
+        },
+        "data_types": {
+          "status": "PASS",
+          "details": []
+        },
+        "unique_product_id": {
+          "status": "PASS",
+          "failed_rows": 0,
+          "details": "0 ligne(s) en doublon sur ['product_id']"
+        },
+        "positive_price": {
+          "status": "PASS",
+          "failed_rows": 0,
+          "details": "0 valeur(s) hors bornes"
+        }
+      },
+      "overall_status": "WARN",
+      "decision": "continue"
+    }
+  }
+}

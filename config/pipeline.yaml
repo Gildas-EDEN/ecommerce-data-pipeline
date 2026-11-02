@@ -1,0 +1,74 @@
+# =============================================================================
+# Règles métier du pipeline
+# On modifie ce fichier (et pas le code) pour faire évoluer les règles :
+# nouvelle colonne obligatoire, nouveau statut autorisé, seuil de tolérance...
+# =============================================================================
+
+# --- Historisation de la dimension client (SCD type 2) -----------------------
+scd2:
+  business_key: customer_id               # identifiant « métier » du client
+  tracked_columns: [name, email, status]  # un changement ici => nouvelle version
+  end_of_time: "9999-12-31"               # date de fin d'une version encore valide
+
+# --- Règles de qualité, table par table ---------------------------------------
+# required         : colonnes qui ne doivent jamais être vides (sinon FAIL)
+# optional         : colonnes connues mais facultatives (une colonne inconnue => WARN)
+# unique           : colonne(s) qui identifient une ligne de façon unique
+# email            : colonnes qui doivent contenir un e-mail valide
+# allowed_values   : liste fermée de valeurs autorisées
+# positive         : valeurs strictement > 0
+# non_negative     : valeurs >= 0
+# types            : type attendu (integer, number, string, date, datetime)
+# max_invalid_ratio: part maximale de lignes invalides tolérée. Au-delà => FAIL
+#                    (le pipeline s'arrête). En dessous => les lignes invalides
+#                    sont mises en QUARANTAINE et le pipeline continue.
+#                    0.0 = tolérance zéro (comportement par défaut, le plus sûr).
+validation:
+  customers:
+    required: [customer_id, name, email, registration_date, status]
+    optional: [last_updated]
+    unique: [customer_id]
+    email: [email]
+    allowed_values:
+      status: [active, inactive]
+    types:
+      customer_id: integer
+      registration_date: date
+      last_updated: datetime
+    max_invalid_ratio: 0.0
+
+  orders:
+    required: [order_id, customer_id, order_date, total_amount]
+    unique: [order_id]
+    non_negative: [total_amount]
+    types:
+      customer_id: integer
+      order_date: date
+      total_amount: number
+    max_invalid_ratio: 0.0
+
+  order_items:
+    required: [order_id, line_number, product_id, quantity, unit_price]
+    unique: [[order_id, line_number]]
+    positive: [quantity]
+    non_negative: [unit_price]
+    types:
+      line_number: integer
+      quantity: integer
+      unit_price: number
+    max_invalid_ratio: 0.0
+
+  products:
+    required: [product_id, name, category, price, supplier]
+    unique: [product_id]
+    positive: [price]
+    types:
+      price: number
+    max_invalid_ratio: 0.0
+
+# --- Règle métier transverse ---------------------------------------------------
+# Le montant total d'une commande doit correspondre à la somme de ses lignes
+# (quantité x prix unitaire). Un écart n'est pas bloquant (frais de port,
+# remise...) mais il est signalé dans le rapport (WARN).
+order_totals:
+  tolerance: 0.01

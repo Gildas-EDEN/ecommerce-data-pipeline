@@ -1,0 +1,15 @@
+# SCD2 « natif » de dbt : à chaque `dbt snapshot`, dbt compare la table source
+# customers à sa copie historisée et ferme / crée les versions lui-même
+# (colonnes dbt_valid_from / dbt_valid_to).
+# On obtient le même résultat que notre SCD2Processor Python, en quelques lignes :
+# c'est la méthode la plus courante en entreprise. Les deux coexistent ici pour
+# comparer l'approche « à la main » et l'approche outillée.
+snapshots:
+  - name: snap_customers
+    relation: source('operational', 'customers')
+    config:
+      schema: snapshots
+      unique_key: customer_id
+      strategy: timestamp          # une ligne a changé si last_updated a changé
+      updated_at: last_updated
+      hard_deletes: invalidate     # un client supprimé de la source voit sa version fermée

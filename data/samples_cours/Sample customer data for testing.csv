@@ -1,0 +1,6 @@
+"customer_id,name,email,registration_date,status,last_updated"
+"1001,Alice Johnson,alice.johnson@email.com,2023-01-15,active,2024-02-01"
+"1002,Bob Smith,bob.smith@email.com,2023-02-20,active,2024-02-01"
+"1003,Carol Davis,carol.davis@email.com,2023-03-10,inactive,2024-01-28"
+"1004,David Wilson,david.wilson@email.com,2023-04-05,active,2024-02-01"
+"1005,Eve Brown,eve.brown@email.com,2023-05-12,active,2024-01-30"

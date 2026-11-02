@@ -1,0 +1,29 @@
+version: 2
+
+models:
+  - name: fct_orders_enriched
+    description: "Commandes enrichies du statut client à la date de commande (modèle incrémental)"
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+      - name: customer_segment_at_order
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["active", "inactive", "unknown"]
+
+  - name: mart_daily_sales_by_segment
+    description: "Ventes quotidiennes par segment client"
+    columns:
+      - name: order_date
+        data_tests: [not_null]
+      - name: revenue
+        data_tests: [not_null]
+
+  - name: mart_product_performance
+    description: "Synthèse de la performance des produits"
+    columns:
+      - name: product_id
+        data_tests: [unique, not_null]
+      - name: revenue_rank
+        data_tests: [not_null]

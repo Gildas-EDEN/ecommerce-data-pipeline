@@ -1,0 +1,27 @@
+version: 2
+
+# Les « sources » sont les tables que dbt LIT sans les avoir créées.
+sources:
+  - name: operational
+    description: "Base opérationnelle (simulée) de l'application e-commerce"
+    schema: public
+    tables:
+      - name: customers
+        description: "Table source des clients, mise à jour par l'application"
+
+  - name: warehouse
+    description: "Tables chargées par le pipeline Python (extraction, validation, SCD2, chargement)"
+    schema: public
+    tables:
+      - name: dim_customers
+        description: "Dimension client historisée (SCD2) construite par SCD2Processor"
+      - name: fact_daily_orders
+        description: "Faits journaliers par client (pandas ou Spark)"
+      - name: fact_product_performance
+        description: "Faits journaliers par produit (pandas ou Spark)"
+      - name: raw_orders
+        description: "Commandes brutes reçues de l'API"
+      - name: raw_order_items
+        description: "Lignes de commande brutes"
+      - name: raw_products
+        description: "Catalogue produits brut (fichier CSV)"

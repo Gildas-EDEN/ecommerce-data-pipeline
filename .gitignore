@@ -1,0 +1,29 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# Données produites à l'exécution (régénérables)
+data/checkpoints/
+data/state/
+data/output/
+logs/
+
+# dbt
+dbt_project/target/
+dbt_project/logs/
+dbt_project/dbt_packages/
+dbt_project/.user.yml
+
+# Spark
+spark-warehouse/
+metastore_db/
+derby.log
+
+# Livrable
+soumission/

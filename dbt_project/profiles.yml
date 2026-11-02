@@ -1,0 +1,15 @@
+# Connexion de dbt à PostgreSQL. Aucune valeur en dur : tout vient des variables
+# d'environnement (les mêmes que le pipeline Python), avec des valeurs par défaut
+# adaptées au lancement depuis ton PC.
+ecommerce_analytics:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('DB_HOST', 'localhost') }}"
+      port: "{{ env_var('DB_PORT', '5432') | as_number }}"
+      user: "{{ env_var('DB_USER', 'pipeline_user') }}"
+      password: "{{ env_var('DB_PASSWORD', 'secure_password') }}"
+      dbname: "{{ env_var('DB_NAME', 'analytics') }}"
+      schema: dbt        # schémas créés : dbt_staging, dbt_marts, dbt_snapshots
+      threads: 4

@@ -1,0 +1,28 @@
+# =============================================================================
+# Projet dbt : couche de transformation SQL « dans l'entrepôt » (approche ELT).
+# dbt compile des fichiers SELECT en tables/vues, dans le bon ordre (graphe de
+# dépendances), et teste les résultats.
+#   dbt snapshot : SCD2 natif de dbt sur la table source customers
+#   dbt run      : construit les modèles (staging -> marts)
+#   dbt test     : vérifie les règles de cohérence (tests/ et fichiers schema.yml)
+# =============================================================================
+name: ecommerce_analytics
+version: "1.0.0"
+profile: ecommerce_analytics
+
+model-paths: ["models"]
+snapshot-paths: ["snapshots"]
+test-paths: ["tests"]
+
+flags:
+  send_anonymous_usage_stats: false   # pas de statistiques d'usage envoyées à dbt Labs
+  use_colors: false                   # logs lisibles dans l'interface d'Airflow
+
+models:
+  ecommerce_analytics:
+    staging:          # nettoyage léger des tables brutes : simples vues
+      +schema: staging
+      +materialized: view
+    marts:            # tables prêtes pour l'analyse (tableaux de bord, BI)
+      +schema: marts
+      +materialized: table

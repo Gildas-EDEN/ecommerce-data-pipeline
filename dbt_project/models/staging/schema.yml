@@ -1,0 +1,51 @@
+version: 2
+
+models:
+  - name: stg_orders
+    description: "Commandes (une ligne par commande)"
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+      - name: customer_id
+        data_tests:
+          - not_null
+          # Intégrité référentielle : chaque commande doit concerner un client connu.
+          # Sévérité « warn » : un client peut arriver un peu après sa commande.
+          - relationships:
+              arguments:
+                to: ref('stg_customer_versions')
+                field: customer_id
+              config:
+                severity: warn
+      - name: total_amount
+        data_tests: [not_null]
+
+  - name: stg_order_items
+    description: "Lignes de commande"
+    columns:
+      - name: product_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_products')
+                field: product_id
+              config:
+                severity: warn
+
+  - name: stg_products
+    description: "Catalogue produits"
+    columns:
+      - name: product_id
+        data_tests: [unique, not_null]
+
+  - name: stg_customer_versions
+    description: "Versions SCD2 des clients"
+    columns:
+      - name: dim_customer_key
+        data_tests: [unique, not_null]
+      - name: status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["active", "inactive"]

@@ -1,0 +1,13 @@
+# Dépendances pour exécuter le pipeline et les tests SUR TON PC (hors Docker).
+# Les versions du cours (pandas 2.0.3, Airflow 2.8.1...) ne s'installent plus
+# sur les Python récents : on fixe des bornes minimales compatibles.
+pandas>=2.1
+pyarrow>=14.0
+psycopg2-binary>=2.9.9
+requests>=2.31
+python-dotenv>=1.0
+PyYAML>=6.0
+pytest>=8.0
+
+# Facultatif sur PC : Spark et Airflow tournent dans Docker (voir docker/airflow/).
+# pyspark>=4.0   (nécessite Java 17 ou 21)

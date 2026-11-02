@@ -1,0 +1,121 @@
+# =============================================================================
+# Environnement complet du projet, lancé avec :  docker compose up -d --build
+#
+#   postgres  : base source (customers) + entrepôt (dim/fact) + métadonnées Airflow
+#   mock-api  : API REST des commandes (simulée)
+#   airflow   : ordonnanceur + interface web (http://localhost:8080, admin / admin)
+#               avec Spark (mode local) et dbt installés dans l'image
+#   adminer   : interface web pour explorer la base (http://localhost:8081)
+#
+# Les valeurs ${VAR:-défaut} peuvent être surchargées dans le fichier .env.
+# =============================================================================
+name: pipeline-spark-dbt-airflow
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"   # accessible depuis ton PC (pipeline lancé hors Docker, DBeaver...)
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./sql/init:/docker-entrypoint-initdb.d:ro   # scripts lancés au 1er démarrage
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d analytics"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mock-api:
+    image: python:3.12-slim
+    command: ["python", "/app/server.py"]
+    environment:
+      API_KEY: ${API_KEY:-dev-api-key}
+      MOCK_API_DATA_FILE: /data/orders.json
+      MOCK_API_FAIL_FIRST: ${MOCK_API_FAIL_FIRST:-0}       # ex. 2 : les 2 premiers appels échouent (HTTP 500)
+      MOCK_API_FAILURE_RATE: ${MOCK_API_FAILURE_RATE:-0}   # ex. 0.3 : 30 % d'erreurs aléatoires
+    volumes:
+      - ./mock_api:/app:ro
+      - ./data/api:/data:ro
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  airflow:
+    build: ./docker/airflow
+    image: pipeline-airflow:3.3.2
+    # « standalone » lance tous les composants d'Airflow dans un seul conteneur
+    # (serveur web/API, scheduler, dag-processor, triggerer) : idéal en développement.
+    # Le fichier de mots de passe fixe l'identifiant admin / admin du guide du cours.
+    command: >
+      bash -c "echo '{\"admin\": \"admin\"}' > /opt/airflow/passwords.json && exec airflow standalone"
+    environment:
+      # --- Airflow ---
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__PARALLELISM: "8"    # 8 tâches simultanées max (32 par défaut : trop pour un PC)
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/project/dags
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: admin:admin
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE: /opt/airflow/passwords.json
+      AIRFLOW__DAG_PROCESSOR__REFRESH_INTERVAL: "30"
+      AIRFLOW_CONN_FS_DEFAULT: '{"conn_type": "fs", "extra": {"path": "/opt/project"}}'
+      # --- Pipeline (mêmes variables que le fichier .env, adaptées au réseau Docker) ---
+      PYTHONPATH: /opt/project
+      PYTHONDONTWRITEBYTECODE: "1"
+      PIPELINE_PROJECT_DIR: /opt/project
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: analytics
+      DB_USER: pipeline_user
+      DB_PASSWORD: ${DB_PASSWORD:-secure_password}
+      API_ENDPOINT: http://mock-api:8000/orders
+      API_KEY: ${API_KEY:-dev-api-key}
+      INPUT_PATH: /opt/project/data/input
+      OUTPUT_PATH: /opt/project/data/output
+      STATE_PATH: /opt/project/data/state
+      CHECKPOINT_PATH: /opt/project/data/checkpoints
+      LOG_FILE: ""                       # sous Airflow, les logs sont gérés par Airflow
+      ORDER_METRICS_ENGINE: spark
+      PIPELINE_RETRY_DELAY_MINUTES: ${PIPELINE_RETRY_DELAY_MINUTES:-1}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      # --- dbt (dans son environnement virtuel dédié) ---
+      DBT_BIN: /opt/airflow/dbt-venv/bin/dbt
+      DBT_PROJECT_DIR: /opt/project/dbt_project
+      DBT_TARGET_PATH: /tmp/dbt/target   # fichiers techniques de dbt hors du dossier OneDrive
+      DBT_LOG_PATH: /tmp/dbt/logs
+    volumes:
+      - .:/opt/project                   # le code du projet, modifiable en direct depuis ton PC
+      - airflow-logs:/opt/airflow/logs
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mock-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+  adminer:
+    image: adminer:latest
+    ports:
+      - "8081:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    depends_on:
+      - postgres
+
+volumes:
+  pgdata:
+  airflow-logs:

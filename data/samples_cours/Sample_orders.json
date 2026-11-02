@@ -1,0 +1,25 @@
+{
+  "orders": [
+    {
+      "order_id": "ORD-2024-001",
+      "customer_id": 1001,
+      "order_date": "2024-02-01",
+      "total_amount": 154.98,
+      "items": [
+        {"product_id": "P001", "quantity": 1, "unit_price": 129.99},
+        {"product_id": "P003", "quantity": 1, "unit_price": 24.99}
+      ]
+    },
+    {
+      "order_id": "ORD-2024-002", 
+      "customer_id": 1002,
+      "order_date": "2024-02-01",
+      "total_amount": 89.95,
+      "items": [
+        {"product_id": "P002", "quantity": 1, "unit_price": 89.95}
+      ]
+    }
+  ],
+  "has_more": true,
+  "next_page": 2
+}
