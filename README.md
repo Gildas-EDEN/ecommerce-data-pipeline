@@ -1,29 +1,36 @@
-# Pipeline de données automatisé avec Spark, dbt et Airflow
+# Automated Data Pipeline with Spark, dbt, and Airflow
 
-Ce projet est un pipeline ETL de données automatisé qui remplace le traitement manuel quotidien d’une entreprise e-commerce. Il consolide trois sources hétérogènes : une base clients, une API de commandes et un fichier catalogue produits. Il les unifie dans un modèle de données cohérent, prêt pour l’analyse.
+This project is an automated ETL pipeline designed to replace a
+company's daily manual data processing. It consolidates three
+heterogeneous sources: a customer database, an orders API, and a product
+catalog file. The pipeline integrates them into a consistent data model
+ready for analysis.
 
----
+------------------------------------------------------------------------
 
-## Ce que fait le pipeline
+## What the Pipeline Does
 
-```mermaid
+``` mermaid
 flowchart LR
     subgraph S[Sources]
-        DB[(PostgreSQL<br/>table customers)]
-        API[API REST<br/>commandes]
-        CSV[/Fichier CSV<br/>catalogue produits/]
+        DB[(PostgreSQL<br/>customers table)]
+        API[REST API<br/>orders]
+        CSV[/CSV file<br/>product catalog/]
     end
-    subgraph P[Pipeline Python orchestré par Airflow]
-        E[1. Extraction<br/>incrémentale]
-        V{2. Porte<br/>qualité}
-        SC[3a. SCD2<br/>clients]
-        SP[3b. Agrégats<br/>avec Spark]
-        L[4. Chargement<br/>atomique]
+
+    subgraph P[Python Pipeline Orchestrated by Airflow]
+        E[1. Incremental<br/>extraction]
+        V{2. Data Quality<br/>Gate}
+        SC[3a. Customer<br/>SCD2]
+        SP[3b. Aggregations<br/>with Spark]
+        L[4. Atomic<br/>loading]
     end
-    subgraph W[Entrepôt PostgreSQL]
+
+    subgraph W[PostgreSQL Data Warehouse]
         T[(dim_customers<br/>fact_daily_orders<br/>fact_product_performance<br/>raw_*)]
-        M[(Marts dbt<br/>ventes par segment<br/>performance produits)]
+        M[(dbt Marts<br/>sales by segment<br/>product performance)]
     end
+
     DB --> E
     API --> E
     CSV --> E
@@ -33,154 +40,299 @@ flowchart LR
     L --> T -->|dbt run + dbt test| M
 ```
 
-1. **Extraction incrémentale** des 3 sources, en parallèle : seuls les enregistrements nouveaux ou modifiés depuis la dernière exécution sont lus (watermarks).
-2. **Porte qualité** : valeurs manquantes, types, doublons, e-mails, valeurs autorisées, bornes, cohérence des montants. Si une table est en échec, rien n'est chargé.
-3. **Transformations** : historisation SCD2 des clients (pandas) et agrégats de commandes (Spark).
-4. **Chargement atomique** dans PostgreSQL : tout est écrit dans une seule transaction (COMMIT ou ROLLBACK).
-5. **dbt** construit les tables d'analyse (dont une jointure « point-in-time » sur l'historique client) et les teste.
-6. **Rapport** de qualité et d'exécution, alertes en cas d'échec, nettoyage des fichiers temporaires.
+1.  **Incremental extraction** from the three sources in parallel: only
+    records created or modified since the previous run are read
+    (watermarks).
+2.  **Data quality gate:** checks for missing values, data types,
+    duplicates, email addresses, allowed values, valid ranges, and
+    amount consistency. If a table fails validation, nothing is loaded.
+3.  **Transformations:** customer history tracking using SCD Type 2
+    (pandas) and order aggregations (Spark).
+4.  **Atomic loading** into PostgreSQL: all data is written within a
+    single transaction (COMMIT or ROLLBACK).
+5.  **dbt** builds analytical tables (including a point-in-time join
+    against customer history) and tests them.
+6.  **Reporting:** data quality and execution reports, failure alerts,
+    and temporary-file cleanup.
 
-Chaque étape sauvegarde son résultat (checkpoint) : après une panne, la relance repart de l'étape qui a échoué, sans ré-extraire les données.
+Each step saves its output as a checkpoint. If a failure occurs, the
+next run resumes from the failed step without extracting the data again.
 
----
+------------------------------------------------------------------------
 
-## Résultats vérifiés
+## Verified Results
 
-| Vérification | Résultat |
-|---|---|
-| Tests automatisés (dans le conteneur Docker) | **48 réussis sur 48**, dont les 8 cas de test du cours |
-| Tests automatisés (sur Windows, sans Airflow ni Spark) | 43 réussis, 2 ignorés (ceux qui exigent Airflow ou Spark) |
-| 1re exécution du DAG dans Airflow 3.3.2 | 14 tâches réussies en moins de 3 minutes : 5 clients, 144 commandes, 287 lignes, 5 produits |
-| 2e exécution après une journée d'activité simulée | **Incrémental** : 5 clients extraits (sur 8), 7 commandes (sur 148), catalogue inchangé donc ignoré |
-| Historique SCD2 | Bob : 2 versions (changement d'e-mail), Carol : inactive puis active, 3 nouveaux clients, aucun chevauchement |
-| Porte qualité (e-mail invalide injecté) | Arrêt à `validate_data`, rien de chargé, alerte écrite ; après correction, reprise sans fausse version |
-| Panne de l'API puis `--resume` | Seule l'extraction des commandes est refaite, les autres étapes repartent du checkpoint |
-| dbt | 7 modèles construits, 24 tests : 23 réussis, 1 avertissement volontaire (commande avec frais de port) |
-| Performance (`scripts/benchmark.py`) | **100 000 enregistrements transformés en 8 s** (limite du cahier des charges : 2 h) |
+  -----------------------------------------------------------------------
+  Check                               Result
+  ----------------------------------- -----------------------------------
+  Automated tests (inside the Docker  **48 out of 48 passed**, including
+  container)                          the 8 test cases specified in the
+                                      course
 
-Des exemples de rapports réels sont dans [docs/exemples_rapports/](docs/exemples_rapports/).
+  Automated tests (on Windows,        43 passed, 2 skipped (the tests
+  without Airflow or Spark)           requiring Airflow or Spark)
 
----
+  First DAG run in Airflow 3.3.2      14 tasks completed successfully in
+                                      under 3 minutes: 5 customers, 144
+                                      orders, 287 line items, 5 products
 
-## Démarrage rapide
+  Second run after a simulated day of **Incremental processing:** 5
+  activity                            customers extracted (out of 8), 7
+                                      orders (out of 148); unchanged
+                                      product catalog skipped
 
-### Prérequis
+  SCD2 history                        Bob: 2 versions (email change);
+                                      Carol: inactive then active; 3 new
+                                      customers; no overlapping validity
+                                      periods
 
-- Docker Desktop (démarré), 8 Go de RAM, ports 5432, 8000, 8080 et 8081 libres
-- Python 3.11 ou plus récent (uniquement pour lancer les tests ou le pipeline hors Docker)
+  Data quality gate (invalid email    Pipeline stopped at
+  injected)                           `validate_data`; nothing was loaded
+                                      and an alert was generated. After
+                                      correction, processing resumed
+                                      without creating a false version
 
-### Option A : lancer les tests sur ton PC (2 minutes)
+  API failure followed by `--resume`  Only order extraction was repeated;
+                                      the other steps resumed from their
+                                      checkpoints
 
-L'environnement Python est créé **hors du dossier OneDrive** (des milliers de petits fichiers à synchroniser sinon) :
+  dbt                                 7 models built, 24 tests: 23
+                                      passed, 1 intentional warning
+                                      (order with shipping fees)
 
-```powershell
+  Performance                         **100,000 records transformed in 8
+  (`scripts/benchmark.py`)            seconds** (project specification
+                                      limit: 2 hours)
+  -----------------------------------------------------------------------
+
+Examples of actual reports are available in
+[docs/exemples_rapports/](docs/exemples_rapports/).
+
+------------------------------------------------------------------------
+
+## Quick Start
+
+### Prerequisites
+
+-   Docker Desktop (running), 8 GB of RAM, and ports 5432, 8000, 8080,
+    and 8081 available
+-   Python 3.11 or later (only required to run tests or the pipeline
+    outside Docker)
+
+### Option A: Run the Tests on Your PC (2 minutes)
+
+The Python virtual environment is created **outside the OneDrive
+folder** to avoid synchronizing thousands of small files:
+
+``` powershell
 python -m venv C:\Users\gilda\.venvs\pipeline-spark-dbt-airflow
 C:\Users\gilda\.venvs\pipeline-spark-dbt-airflow\Scripts\python.exe -m pip install -r requirements.txt
 C:\Users\gilda\.venvs\pipeline-spark-dbt-airflow\Scripts\python.exe -m pytest -v
 ```
 
-(Sur ce PC, l'environnement existe déjà : seule la dernière commande est nécessaire.)
+(On this PC, the environment already exists, so only the last command is
+needed.)
 
-### Option B : tout l'environnement avec Docker (10 minutes la première fois)
+### Option B: Run the Full Environment with Docker (10 minutes the first time)
 
-```powershell
+``` powershell
 docker compose up -d --build
 ```
 
-Puis ouvre **http://localhost:8080** (identifiant `admin`, mot de passe `admin`), active le DAG `automated_data_pipeline` et regarde les tâches s'exécuter. Le guide complet, avec des exercices, est dans [docs/03_guide_pas_a_pas.md](docs/03_guide_pas_a_pas.md).
+Then open **http://localhost:8080** (username: `admin`, password:
+`admin`), enable the `automated_data_pipeline` DAG, and watch the tasks
+run. The complete guide, including exercises, is available in
+[docs/03_guide_pas_a_pas.md](docs/03_guide_pas_a_pas.md).
 
-| Service | Adresse | Accès |
-|---|---|---|
-| Airflow | http://localhost:8080 | admin / admin |
-| Adminer (explorer la base) | http://localhost:8081 | Système PostgreSQL, serveur `postgres`, utilisateur `pipeline_user`, mot de passe `secure_password`, base `analytics` |
-| API simulée | http://localhost:8000/health | clé `dev-api-key` |
-| PostgreSQL | localhost:5432 | comme Adminer |
+  ------------------------------------------------------------------------------
+  Service                 Address                        Access
+  ----------------------- ------------------------------ -----------------------
+  Airflow                 http://localhost:8080          admin / admin
 
----
+  Adminer (database       http://localhost:8081          System: PostgreSQL;
+  browser)                                               server: `postgres`;
+                                                         username:
+                                                         `pipeline_user`;
+                                                         password:
+                                                         `secure_password`;
+                                                         database: `analytics`
 
-## Structure du projet
+  Simulated API           http://localhost:8000/health   API key: `dev-api-key`
 
-```
+  PostgreSQL              localhost:5432                 Same credentials as
+                                                         Adminer
+  ------------------------------------------------------------------------------
+
+------------------------------------------------------------------------
+
+## Project Structure
+
+``` text
 Projet_Pipeline_Spark_dbt_Airflow/
-├── config.py               configuration : variables d'environnement + règles YAML
-├── extractors.py           connecteurs : base clients, API des commandes, CSV produits
-├── transformers.py         nettoyage, agrégats pandas, SCD2, contrôles qualité
-├── loaders.py              chargement atomique dans PostgreSQL (UPSERT, SCD2)
-├── pipeline.py             enchaînement des étapes, checkpoints, ligne de commande
-├── checkpoint.py           points de reprise et watermarks
-├── db.py                   pool de connexions PostgreSQL
-├── reporting.py            rapport d'exécution (JSON + Markdown) et lignage
-├── utils.py                logs, relances, conversions de types, alertes
-├── dags/airflow_dag.py     le DAG Airflow (14 tâches)
-├── spark_jobs/             agrégats de commandes calculés avec Spark
-├── dbt_project/            modèles SQL, modèle incrémental, snapshot SCD2, tests dbt
-├── config/pipeline.yaml    règles métier : colonnes obligatoires, SCD2, tolérances
-├── sql/init/               création des bases et tables (script du cours, complété)
-├── mock_api/server.py      API des commandes simulée (l'URL du cours n'existe pas)
-├── scripts/                données de démo, simulation d'activité, benchmark, remise à zéro
-├── tests/                  48 tests automatisés (dont les 8 cas du cours)
-├── data/                   données d'entrée ; checkpoints et rapports y sont créés
-├── docker/airflow/         image Airflow + Java + Spark + dbt
-├── docker-compose.yml      l'environnement complet en une commande
-├── docs/                   documentation détaillée
-└── .env.example            modèle de configuration (à copier en .env)
+├── config.py               configuration: environment variables + YAML rules
+├── extractors.py           connectors: customer database, orders API, product CSV
+├── transformers.py         cleaning, pandas aggregations, SCD2, quality checks
+├── loaders.py              atomic loading into PostgreSQL (UPSERT, SCD2)
+├── pipeline.py              pipeline orchestration, checkpoints, command line
+├── checkpoint.py            recovery points and watermarks
+├── db.py                    PostgreSQL connection pool
+├── reporting.py              execution report (JSON + Markdown) and lineage
+├── utils.py                  logs, retries, type conversions, alerts
+├── dags/airflow_dag.py       Airflow DAG (14 tasks)
+├── spark_jobs/               order aggregations computed with Spark
+├── dbt_project/              SQL models, incremental model, SCD2 snapshot, dbt tests
+├── config/pipeline.yaml      business rules: required columns, SCD2, tolerances
+├── sql/init/                 database and table creation (course script, extended)
+├── mock_api/server.py        simulated orders API (the course API URL is unavailable)
+├── scripts/                  demo data, activity simulation, benchmark, reset
+├── tests/                    48 automated tests (including the 8 course test cases)
+├── data/                     input data; checkpoints and reports are generated here
+├── docker/airflow/            Airflow + Java + Spark + dbt image
+├── docker-compose.yml         complete environment launched with one command
+├── docs/                      detailed documentation
+└── .env.example               configuration template (copy to .env)
 ```
 
----
+------------------------------------------------------------------------
 
-## Correspondance avec le cahier des charges
+## Mapping to the Project Requirements
 
-### Les 8 exigences fonctionnelles
+### The 8 Functional Requirements
 
-| Exigence du cours | Où | Comment |
-|---|---|---|
-| 1. Ingestion multi-sources | `extractors.py` | `DatabaseExtractor` (PostgreSQL), `APIExtractor` (REST paginée), `FileExtractor` (CSV) |
-| 2. Validation de la qualité | `transformers.py` (`DataValidator`), `config/pipeline.yaml` | 9 familles de contrôles, décision PASS / WARN / FAIL, quarantaine optionnelle |
-| 3. Traitement incrémental | `pipeline.py`, `checkpoint.py` (`WatermarkStore`), modèle dbt `fct_orders_enriched` | watermark par source, empreinte du fichier, SCD2 par empreinte, UPSERT, modèle dbt incrémental |
-| 4. Historisation SCD2 | `transformers.py` (`SCD2Processor`), `loaders.py`, `dbt_project/snapshots/` | versions fermées / créées, intervalles sans trou ni chevauchement, index unique en base |
-| 5. Logique modulaire | un module par responsabilité, fonctions pures | transformations testables sans base de données |
-| 6. Gestion des erreurs et reprise | `utils.retry_call`, `APIExtractor._get_json`, `checkpoint.py`, callbacks Airflow | relances avec attente exponentielle, checkpoints, ROLLBACK, alertes |
-| 7. Planification automatique | `dags/airflow_dag.py` | tous les jours à 2 h, une seule exécution à la fois, limite de 2 h |
-| 8. Lignage des données | colonnes `run_id` / `loaded_at`, section « Lignage » des rapports, graphe dbt | chaque ligne sait quelle exécution l'a écrite |
+  ---------------------------------------------------------------------------
+  Course requirement      Location                    Implementation
+  ----------------------- --------------------------- -----------------------
+  1\. Multi-source        `extractors.py`             `DatabaseExtractor`
+  ingestion                                           (PostgreSQL),
+                                                      `APIExtractor`
+                                                      (paginated REST),
+                                                      `FileExtractor` (CSV)
 
-### Les 8 cas de test
+  2\. Data quality        `transformers.py`           9 categories of checks,
+  validation              (`DataValidator`),          PASS / WARN / FAIL
+                          `config/pipeline.yaml`      decisions, optional
+                                                      quarantine
 
-| Cas de test du cours | Test | Ce qui est vérifié |
-|---|---|---|
-| 1. Extraction de base de données | `tests/test_extractors.py::test_tc1_*` | schéma, nombre de lignes, types, lecture par lots, requête paramétrée |
-| 2. Erreur HTTP 500 de l'API | `tests/test_extractors.py::test_tc2_*` | 3 tentatives, attentes de 1 s puis 2 s, exception claire, pas de relance sur 401 |
-| 3. SCD2 : nouveaux clients | `tests/test_scd2.py::test_tc3_*` | 3 nouvelles versions avec leurs dates d'effet |
-| 4. SCD2 : e-mail modifié | `tests/test_scd2.py::test_tc4_*` | ancienne version fermée, nouvelle version à la date du changement |
-| 5. Valeurs manquantes | `tests/test_validation.py::test_tc5_*` | échec avec rapport détaillé, pipeline arrêté avant la transformation |
-| 6. Traitement incrémental | `tests/test_incremental.py::test_tc6_*` | 10 000 clients puis 10 % de changements : seuls 1 000 sont traités |
-| 7. Reprise après panne | `tests/test_recovery.py::test_tc7_*` | relance à partir de la transformation, sans ré-extraction |
-| 8. Validation du DAG | `tests/test_dag.py::test_tc8_*` | DAG chargé sans erreur, 14 tâches, dépendances et réglages corrects |
+  3\. Incremental         `pipeline.py`,              Per-source watermarks,
+  processing              `checkpoint.py`             file fingerprint, SCD2
+                          (`WatermarkStore`), dbt     based on fingerprints,
+                          model `fct_orders_enriched` UPSERT, incremental dbt
+                                                      model
 
----
+  4\. SCD2 history        `transformers.py`           Closed and new
+  tracking                (`SCD2Processor`),          versions, intervals
+                          `loaders.py`,               without gaps or
+                          `dbt_project/snapshots/`    overlaps, unique
+                                                      database index
 
-## Documentation détaillée
+  5\. Modular design      One module per              Transformations can be
+                          responsibility, pure        tested without a
+                          functions                   database
 
-1. [Les concepts clés](docs/01_concepts_cles.md) : incrémental, SCD2, qualité, idempotence, Airflow, Spark, dbt, Docker, expliqués avec les données du projet.
-2. [L'architecture](docs/02_architecture.md) : le rôle de chaque tâche, le modèle de données, les choix techniques et les limites.
-3. [Le guide pas à pas](docs/03_guide_pas_a_pas.md) : installer, lancer, observer, puis provoquer des pannes pour voir le pipeline réagir.
-4. [La solution officielle du cours comparée à ce projet](docs/04_solution_officielle_vs_ma_version.md) : ce qui ne fonctionnait pas et pourquoi.
+  6\. Error handling and  `utils.retry_call`,         Retries with
+  recovery                `APIExtractor._get_json`,   exponential backoff,
+                          `checkpoint.py`, Airflow    checkpoints, ROLLBACK,
+                          callbacks                   alerts
 
----
+  7\. Automated           `dags/airflow_dag.py`       Runs daily at 2 a.m.,
+  scheduling                                          one run at a time,
+                                                      2-hour limit
 
-## Commandes utiles
+  8\. Data lineage        `run_id` / `loaded_at`      Each row records which
+                          columns, "Lineage" section  pipeline run created it
+                          in reports, dbt graph       
+  ---------------------------------------------------------------------------
 
-| Action | Commande |
-|---|---|
-| Démarrer l'environnement | `docker compose up -d --build` |
-| État des conteneurs | `docker compose ps` |
-| Tests dans le conteneur (dont Airflow et Spark) | `docker compose exec -w /opt/project airflow python -m pytest -v` |
-| Simuler une journée d'activité | `docker compose exec airflow python /opt/project/scripts/simulate_changes.py` |
-| Pipeline en ligne de commande (sur le PC) | `python pipeline.py` puis, après une panne, `python pipeline.py --resume` |
-| Mesure de performance | `python scripts/benchmark.py` |
-| Créer le .zip demandé par le cours | `python scripts/build_submission.py` |
-| Arrêter (les données sont conservées) | `docker compose stop` |
-| Tout remettre à zéro | `python scripts/reset_demo.py --docker` |
+### The 8 Test Cases
 
-## Versions utilisées
+  -----------------------------------------------------------------------------------------
+  Course test case        Test                                      What it verifies
+  ----------------------- ----------------------------------------- -----------------------
+  1\. Database extraction `tests/test_extractors.py::test_tc1_*`    Schema, row count, data
+                                                                    types, batch reading,
+                                                                    parameterized query
 
-Airflow 3.3.2 (le cours utilise 2.8.1, le DAG est compatible avec les deux), PySpark 4.2.0 avec Java, dbt-core 1.12 et dbt-postgres 1.11, PostgreSQL 17, Python 3.12 dans Docker et 3.14 sur le PC, pandas 3.0.
+  2\. API HTTP 500 error  `tests/test_extractors.py::test_tc2_*`    3 attempts, waits of 1
+                                                                    s then 2 s, clear
+                                                                    exception, no retry on
+                                                                    401
+
+  3\. SCD2: new customers `tests/test_scd2.py::test_tc3_*`          3 new versions with
+                                                                    their effective dates
+
+  4\. SCD2: email changed `tests/test_scd2.py::test_tc4_*`          Previous version
+                                                                    closed, new version
+                                                                    created on the change
+                                                                    date
+
+  5\. Missing values      `tests/test_validation.py::test_tc5_*`    Failure with a detailed
+                                                                    report; pipeline
+                                                                    stopped before
+                                                                    transformation
+
+  6\. Incremental         `tests/test_incremental.py::test_tc6_*`   10,000 customers
+  processing                                                        followed by 10%
+                                                                    changes: only 1,000 are
+                                                                    processed
+
+  7\. Recovery after      `tests/test_recovery.py::test_tc7_*`      Restart from the
+  failure                                                           transformation step,
+                                                                    without re-extraction
+
+  8\. DAG validation      `tests/test_dag.py::test_tc8_*`           DAG loads successfully;
+                                                                    14 tasks, correct
+                                                                    dependencies and
+                                                                    settings
+  -----------------------------------------------------------------------------------------
+
+------------------------------------------------------------------------
+
+## Detailed Documentation
+
+1.  [Key Concepts](docs/01_concepts_cles.md): incremental processing,
+    SCD2, data quality, idempotency, Airflow, Spark, dbt, and Docker,
+    explained using the project's data.
+2.  [Architecture](docs/02_architecture.md): the role of each task, the
+    data model, technical choices, and limitations.
+3.  [Step-by-Step Guide](docs/03_guide_pas_a_pas.md): installation,
+    execution, monitoring, and failure simulations to observe how the
+    pipeline responds.
+4.  [Official Course Solution vs. My
+    Implementation](docs/04_solution_officielle_vs_ma_version.md): what
+    did not work and why.
+
+------------------------------------------------------------------------
+
+## Useful Commands
+
+  -------------------------------------------------------------------------------------------------------------------
+  Action                              Command
+  ----------------------------------- -------------------------------------------------------------------------------
+  Start the environment               `docker compose up -d --build`
+
+  Check container status              `docker compose ps`
+
+  Run tests inside the container      `docker compose exec -w /opt/project airflow python -m pytest -v`
+  (including Airflow and Spark)       
+
+  Simulate one day of activity        `docker compose exec airflow python /opt/project/scripts/simulate_changes.py`
+
+  Run the pipeline from the command   `python pipeline.py`, then after a failure, `python pipeline.py --resume`
+  line (on your PC)                   
+
+  Run the performance benchmark       `python scripts/benchmark.py`
+
+  Create the `.zip` file required by  `python scripts/build_submission.py`
+  the course                          
+
+  Stop the environment (data is       `docker compose stop`
+  preserved)                          
+
+  Reset everything                    `python scripts/reset_demo.py --docker`
+  -------------------------------------------------------------------------------------------------------------------
+
+## Versions Used
+
+Airflow 3.3.2 (the course uses 2.8.1; the DAG is compatible with both),
+PySpark 4.2.0 with Java, dbt-core 1.12 and dbt-postgres 1.11, PostgreSQL
+17, Python 3.12 in Docker and 3.14 on the PC, pandas 3.0.
